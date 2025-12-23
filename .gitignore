@@ -1,0 +1,8 @@
+# Node
+node_modules/
+
+# Azure Functions secrets
+local.settings.json
+
+# OS
+.DS_Store

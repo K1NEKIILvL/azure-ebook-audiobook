@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Azure E-Book → Audiobook</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 780px; margin: 40px auto; padding: 0 16px; }
+    h1 { margin-bottom: 6px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-top: 16px; }
+    button { padding: 10px 16px; font-size: 16px; cursor: pointer; }
+    #status { margin-top: 12px; font-weight: bold; }
+    audio { width: 100%; margin-top: 12px; }
+    .small { color: #666; font-size: 13px; margin-top: 6px; }
+    input[type="file"] { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>📘 Azure E-Book → Audiobook</h1>
+  <div class="small">Upload a PDF, Azure extracts text (Document Intelligence) and generates an MP3 (Speech).</div>
+
+  <div class="card">
+    <h3>1) Upload a PDF</h3>
+    <input id="pdfFile" type="file" accept="application/pdf" />
+    <div class="small">Tip: use a small PDF first (few pages).</div>
+
+    <h3 style="margin-top:18px;">2) Generate Audiobook</h3>
+    <button id="btn" onclick="generateAudio()">Generate</button>
+
+    <div id="status"></div>
+    <audio id="player" controls></audio>
+  </div>
+
+  <script>
+    async function generateAudio() {
+      const fileInput = document.getElementById("pdfFile");
+      const status = document.getElementById("status");
+      const player = document.getElementById("player");
+      const btn = document.getElementById("btn");
+
+      player.src = "";
+      if (!fileInput.files.length) {
+        alert("Please select a PDF first.");
+        return;
+      }
+
+      const file = fileInput.files[0];
+
+      try {
+        btn.disabled = true;
+        status.innerText = "Uploading PDF…";
+
+        // 1) Upload (goes to Azure Function /api/upload)
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: {
+            "x-filename": file.name,
+            "Content-Type": "application/pdf"
+          },
+          body: file
+        });
+
+        if (!uploadRes.ok) {
+          const txt = await uploadRes.text();
+          throw new Error("Upload failed: " + txt);
+        }
+
+        const uploadData = await uploadRes.json();
+        const fileUrl = uploadData.fileUrl;
+
+        status.innerText = "Extracting text & generating MP3…";
+
+        // 2) Convert PDF → Speech (goes to Azure Function /api/fileToSpeech)
+        const ttsRes = await fetch("/api/fileToSpeech", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileUrl })
+        });
+
+        if (!ttsRes.ok) {
+          const txt = await ttsRes.text();
+          throw new Error("fileToSpeech failed: " + txt);
+        }
+
+        const ttsData = await ttsRes.json();
+        player.src = ttsData.audioUrl;
+        status.innerText = "✅ Done! Press play below.";
+      } catch (err) {
+        console.error(err);
+        status.innerText = "❌ Error: " + err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
